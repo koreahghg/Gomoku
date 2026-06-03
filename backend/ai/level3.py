@@ -1,5 +1,5 @@
 from .base import BaseAI
-from .core import BoardState, NullEvaluator, CandidateGenerator
+from .core import BoardState, PatternEvaluator, CandidateGenerator
 from .core.search import MinimaxSearch
 from game.board import Board
 
@@ -9,7 +9,7 @@ class Level3AI(BaseAI):
 
     def __init__(self) -> None:
         generator = CandidateGenerator(radius=2)
-        evaluator = NullEvaluator()
+        evaluator = PatternEvaluator()
         self._search = MinimaxSearch(evaluator, generator)
 
     def get_move(self, board: Board, ai_color: str) -> tuple[int, int]:

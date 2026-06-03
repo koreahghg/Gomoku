@@ -1,5 +1,5 @@
 from .base import BaseAI
-from .core import BoardState, NullEvaluator, CandidateGenerator
+from .core import BoardState, PatternEvaluator, CandidateGenerator
 from .core.search import AlphaBetaSearch
 from game.board import Board
 
@@ -12,7 +12,7 @@ class Level5AI(BaseAI):
 
     def __init__(self) -> None:
         generator = CandidateGenerator(radius=2)
-        evaluator = NullEvaluator()
+        evaluator = PatternEvaluator()
         self._search = AlphaBetaSearch(evaluator, generator)
 
     def get_move(self, board: Board, ai_color: str) -> tuple[int, int]:
