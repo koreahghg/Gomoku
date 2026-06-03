@@ -13,7 +13,8 @@ const STAR_POINTS = [[3, 3], [3, 11], [7, 7], [11, 3], [11, 11]];
 
 export default function Board({ game }: Props) {
   const { state, placeStone } = game;
-  const { board, lastMove } = state;
+  const { board, lastMove, phase } = state;
+  const isGameOver = phase !== 'playing';
 
   const boardPx = CELL_SIZE * BOARD_SIZE;
 
@@ -101,7 +102,7 @@ export default function Board({ game }: Props) {
               return (
                 <div
                   key={`${row}-${col}`}
-                  className="absolute flex items-center justify-center cursor-pointer"
+                  className={`absolute flex items-center justify-center ${isGameOver ? 'cursor-default' : 'cursor-pointer'}`}
                   style={{
                     left: col * CELL_SIZE,
                     top: row * CELL_SIZE,

@@ -6,13 +6,27 @@ interface Props {
 
 export default function GameStatus({ game }: Props) {
   const { state } = game;
-  const { currentTurn, moveCount } = state;
+  const { phase, currentTurn, moveCount } = state;
+
+  let message: string;
+  let messageClass = 'text-xl font-bold text-gray-800';
+
+  if (phase === 'black_win') {
+    message = '흑 승리!';
+    messageClass = 'text-2xl font-bold text-gray-900';
+  } else if (phase === 'white_win') {
+    message = '백 승리!';
+    messageClass = 'text-2xl font-bold text-gray-500';
+  } else if (phase === 'draw') {
+    message = '무승부';
+    messageClass = 'text-2xl font-bold text-yellow-700';
+  } else {
+    message = currentTurn === 'black' ? '흑의 차례' : '백의 차례';
+  }
 
   return (
     <div className="mb-4 text-center">
-      <p className="text-xl font-bold text-gray-800">
-        {currentTurn === 'black' ? '흑의 차례' : '백의 차례'}
-      </p>
+      <p className={messageClass}>{message}</p>
       <p className="text-sm text-gray-500 mt-1">{moveCount}수</p>
     </div>
   );

@@ -15,7 +15,8 @@ export type GamePhase =
   | 'setup'      // 색상·난이도 선택 화면
   | 'playing'    // 게임 진행 중
   | 'black_win'  // 흑 승리
-  | 'white_win'; // 백 승리
+  | 'white_win'  // 백 승리
+  | 'draw';      // 무승부 (225수 소진)
 
 export interface GameState {
   board: Board;
