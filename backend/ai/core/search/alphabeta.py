@@ -6,22 +6,26 @@ from ..candidate import CandidateGenerator
 
 _INF = float("inf")
 _WIN_SCORE = 200_000   # SCORE_TABLE["FIVE"](100_000)보다 커야 한다
-_TT_MAX_SIZE = 500_000 # 엔트리 상한 (~25 MB 추산)
+_TT_MAX_SIZE = 500_000 # 엔트리 상한 (~30 MB 추산)
 
 # TT 플래그
 _EXACT = 0  # 정확한 minimax 값
 _LOWER = 1  # 하한 (beta cutoff 발생)
 _UPPER = 2  # 상한 (fail-low, 개선 없음)
 
+# TT 엔트리 형식: (value, depth, flag, best_move)
+# best_move: (row, col) | None  — 이 노드에서 가장 좋은 수 (Move Ordering 용)
+_TT_Entry = tuple[float, int, int, tuple[int, int] | None]
+
 
 class AlphaBetaSearch(BaseSearch):
-    """Alpha-Beta 가지치기 + Transposition Table 탐색 엔진."""
+    """Alpha-Beta 가지치기 + Transposition Table + Best-Move Ordering 탐색 엔진."""
 
     def __init__(self, evaluator: BaseEvaluator, generator: CandidateGenerator) -> None:
         super().__init__(evaluator, generator)
         self.node_count: int = 0
-        # TT: board_hash → (value, depth, flag)
-        self._tt: dict[int, tuple[float, int, int]] = {}
+        # TT: board_hash → (value, depth, flag, best_move)
+        self._tt: dict[int, _TT_Entry] = {}
 
     def search(self, board: BoardState, color: str, depth: int) -> tuple[int, int]:
         """
@@ -72,9 +76,11 @@ class AlphaBetaSearch(BaseSearch):
 
         # ── Transposition Table 조회 ──────────────────────────────────────
         h = board.hash
-        entry = self._tt.get(h)
+        entry: _TT_Entry | None = self._tt.get(h)
+        tt_best: tuple[int, int] | None = None
+
         if entry is not None:
-            tt_val, tt_depth, tt_flag = entry
+            tt_val, tt_depth, tt_flag, tt_best = entry
             if tt_depth >= depth:
                 if tt_flag == _EXACT:
                     return tt_val
@@ -88,11 +94,22 @@ class AlphaBetaSearch(BaseSearch):
 
         if depth <= 0:
             val = self.evaluator.evaluate(board, self._ai_color)
-            self._tt[h] = (val, 0, _EXACT)
+            self._tt[h] = (val, 0, _EXACT, None)
             return val
 
         candidates = self.generator.generate(board, turn_color)
+
+        # ── TT Best-Move Ordering: 이전 반복에서 찾은 최선 수를 맨 앞으로 ──
+        if tt_best is not None:
+            for i, c in enumerate(candidates):
+                if (c.row, c.col) == tt_best:
+                    if i > 0:
+                        candidates = [candidates[i]] + candidates[:i] + candidates[i+1:]
+                    break
+        # ─────────────────────────────────────────────────────────────────
+
         cutoff = False
+        best_child: tuple[int, int] | None = None
 
         if is_maximizing:
             value = -_INF
@@ -101,11 +118,13 @@ class AlphaBetaSearch(BaseSearch):
                 if self._is_terminal(board, c.row, c.col, turn_color):
                     board.undo()
                     value = _WIN_SCORE + depth
+                    best_child = (c.row, c.col)
                     break
                 val = self._alphabeta(board, self._opponent(turn_color), depth - 1, alpha, beta, False)
                 board.undo()
                 if val > value:
                     value = val
+                    best_child = (c.row, c.col)
                 if value > alpha:
                     alpha = value
                 if alpha >= beta:
@@ -118,11 +137,13 @@ class AlphaBetaSearch(BaseSearch):
                 if self._is_terminal(board, c.row, c.col, turn_color):
                     board.undo()
                     value = -(_WIN_SCORE + depth)
+                    best_child = (c.row, c.col)
                     break
                 val = self._alphabeta(board, self._opponent(turn_color), depth - 1, alpha, beta, True)
                 board.undo()
                 if val < value:
                     value = val
+                    best_child = (c.row, c.col)
                 if value < beta:
                     beta = value
                 if beta <= alpha:
@@ -137,7 +158,7 @@ class AlphaBetaSearch(BaseSearch):
         else:
             flag = _EXACT
         if len(self._tt) < _TT_MAX_SIZE:
-            self._tt[h] = (value, depth, flag)
+            self._tt[h] = (value, depth, flag, best_child)
         # ─────────────────────────────────────────────────────────────────
 
         return value
