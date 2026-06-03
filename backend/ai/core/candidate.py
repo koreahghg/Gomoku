@@ -18,6 +18,34 @@ class Candidate(NamedTuple):
     score: float = 0.0
 
 
+_THREAT_DIRS = ((0, 1), (1, 0), (1, 1), (1, -1))
+
+
+def _count_dir(mask: int, row: int, col: int, dr: int, dc: int) -> int:
+    """(row, col)에서 (dr, dc) 방향 연속 돌 개수 (해당 위치 제외)."""
+    count = 0
+    r, c = row + dr, col + dc
+    while 0 <= r < SIZE and 0 <= c < SIZE and (mask >> (r * SIZE + c)) & 1:
+        count += 1
+        r += dr
+        c += dc
+    return count
+
+
+def _would_five(mask: int, row: int, col: int, is_black: bool) -> bool:
+    """(row, col)에 돌을 놓으면 5목(흑)/5목 이상(백) 달성 여부. mask에 해당 위치 미포함."""
+    new_mask = mask | (1 << (row * SIZE + col))
+    for dr, dc in _THREAT_DIRS:
+        total = (1
+                 + _count_dir(new_mask, row, col,  dr,  dc)
+                 + _count_dir(new_mask, row, col, -dr, -dc))
+        if is_black and total == 5:
+            return True
+        if not is_black and total >= 5:
+            return True
+    return False
+
+
 def _density(occupied: int, row: int, col: int, radius: int) -> int:
     """(row, col) 주변 radius 이내의 돌 개수 (Move Ordering 용 빠른 휴리스틱)."""
     count = 0
@@ -54,11 +82,30 @@ class CandidateGenerator:
         return self._get_proximity_moves(board)
 
     def _get_threat_moves(self, board: BoardState, color: str) -> list[Candidate]:
+        """즉시 승리수(5목 완성) / 즉시 차단수(상대 5목 방어) 탐색.
+        비트보드 직접 연산으로 O(225) 스캔.
+        승리수 발견 시 그것만 반환, 없으면 차단수 반환.
         """
-        즉시 승리수(나의 4 완성) 또는 즉시 차단수(상대 4 방어) 탐색.
-        TODO: 평가 함수 구현 단계에서 패턴 기반으로 완성.
-        """
-        return []
+        opp = "white" if color == "black" else "black"
+        bb = board.bitboard
+        own_mask = bb.get_mask(color)
+        opp_mask = bb.get_mask(opp)
+        occupied = bb.occupied_mask()
+        is_own_black = (color == "black")
+
+        wins: list[Candidate] = []
+        blocks: list[Candidate] = []
+
+        for pos in range(SIZE * SIZE):
+            if (occupied >> pos) & 1:
+                continue
+            row, col = divmod(pos, SIZE)
+            if _would_five(own_mask, row, col, is_own_black):
+                wins.append(Candidate(row, col, 200_000.0))
+            elif _would_five(opp_mask, row, col, not is_own_black):
+                blocks.append(Candidate(row, col, 100_000.0))
+
+        return wins if wins else (blocks if blocks else [])
 
     def _get_proximity_moves(self, board: BoardState) -> list[Candidate]:
         """기존 돌 주변 radius 이내 빈 셀을 후보로 반환.
