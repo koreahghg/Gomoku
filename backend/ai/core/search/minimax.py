@@ -18,7 +18,8 @@ class MinimaxSearch(BaseSearch):
         TODO: _minimax() 연결로 교체.
         """
         candidates = self.generator.generate(board, color)
-        return candidates[0]
+        c = candidates[0]
+        return c.row, c.col
 
     def _minimax(
         self,
