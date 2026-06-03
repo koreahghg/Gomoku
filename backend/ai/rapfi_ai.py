@@ -8,7 +8,7 @@ from game.board import Board, BOARD_SIZE
 
 # ── 설정 ─────────────────────────────────────────────────────────────────────
 _ENGINE_PATH = Path(__file__).parent / "engines" / "rapfi"
-_TIME_MS     = 18_000   # 수당 제한 시간 (ms) — 변경 가능
+_TIME_MS     = 3_000    # 수당 제한 시간 (ms) — 변경 가능
 # ─────────────────────────────────────────────────────────────────────────────
 
 _INSTALL_MSG = """
@@ -65,7 +65,7 @@ class RapfiAI(BaseAI):
 
         self._send(f"INFO timeout_turn {time_ms}")
         self._send("INFO timeout_match 0")
-        self._send("INFO rule 0")   # 0=Freestyle, 1=Standard(금수)
+        self._send("INFO rule 4")   # 4=Renju (흑: 33·44·장목 금수 / 백: 제한 없음)
 
     # ── 저수준 I/O ─────────────────────────────────────────────────────────
 

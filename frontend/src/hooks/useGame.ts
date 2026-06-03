@@ -146,6 +146,25 @@ export function useGame() {
     busyRef.current = true;
     const aiColor: PlayerColor = playerColor === 'black' ? 'white' : 'black';
 
+    // ── 흑 금수 검사 (열린33 · 44 · 장목) ──
+    if (playerColor === 'black') {
+      try {
+        const res = await fetch('/api/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ board, row, col, color: 'black' }),
+        });
+        const data = await res.json();
+        if (!data.valid) {
+          setState(prev => ({ ...prev, invalidReason: data.reason ?? '금수입니다' }));
+          busyRef.current = false;
+          return;
+        }
+      } catch {
+        // 네트워크 오류 시 검증 스킵
+      }
+    }
+
     // ── 플레이어 착수 ──
     const b1: Board = board.map(r => [...r]);
     b1[row][col] = playerColor;
@@ -165,6 +184,7 @@ export function useGame() {
       lastMove: [row, col],
       phase: phase1,
       isAiThinking: phase1 === 'playing',
+      invalidReason: null,   // 유효한 착수 → 이전 금수 메시지 제거
     }));
 
     // 플레이어 착수 후 확률 갱신

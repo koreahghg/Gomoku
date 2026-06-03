@@ -31,6 +31,11 @@ export default function GameStatus({ game }: Props) {
     <div className="mb-4 text-center">
       <p className={messageClass}>{message}</p>
       <p className="text-sm text-gray-500 mt-1">{moveCount}수</p>
+      {state.invalidReason && (
+        <p className="text-sm text-red-600 font-semibold mt-1">
+          ⚠ {state.invalidReason}
+        </p>
+      )}
     </div>
   );
 }
