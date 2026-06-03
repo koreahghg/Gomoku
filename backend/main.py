@@ -1,0 +1,19 @@
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from api.routes import router
+
+app = FastAPI(title="Gomoku API", version="1.0.0")
+
+# 개발 환경: React 개발 서버(3000)의 요청 허용
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(router, prefix="/api")
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
