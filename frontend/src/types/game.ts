@@ -4,8 +4,8 @@ export type Stone = 'black' | 'white' | null;
 // 15x15 보드
 export type Board = Stone[][];
 
-// 난이도 1~5
-export type Difficulty = 1 | 2 | 3 | 4 | 5;
+// 난이도: 1=Easy / 2=Normal / 3=Hard / 4=Extreme
+export type Difficulty = 1 | 2 | 3 | 4;
 
 // 플레이어가 선택한 색상
 export type PlayerColor = 'black' | 'white';

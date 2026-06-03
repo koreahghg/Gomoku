@@ -6,13 +6,14 @@ interface Props {
   game: GameHook;
 }
 
+// ── 난이도 표시 이름 (백엔드 DIFFICULTY_CONFIGS.name과 일치) ──────────────
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  1: '1단계 - 쉬움',
-  2: '2단계 - 보통',
-  3: '3단계 - 어려움',
-  4: '4단계 - 매우 어려움',
-  5: '5단계 - 무적',
+  1: 'Easy',
+  2: 'Normal',
+  3: 'Hard',
+  4: 'Extreme',
 };
+// ────────────────────────────────────────────────────────────────────────
 
 export default function GameControls({ game }: Props) {
   const { state, startGame, resetGame } = game;
@@ -64,7 +65,7 @@ export default function GameControls({ game }: Props) {
           onChange={(e) => setSelectedDifficulty(Number(e.target.value) as Difficulty)}
           className="px-4 py-2 border border-gray-300 rounded text-gray-700"
         >
-          {([1, 2, 3, 4, 5] as Difficulty[]).map((d) => (
+          {([1, 2, 3, 4] as Difficulty[]).map((d) => (
             <option key={d} value={d}>{DIFFICULTY_LABELS[d]}</option>
           ))}
         </select>
