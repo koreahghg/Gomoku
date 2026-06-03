@@ -2,13 +2,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from game.rules import check_winner, validate_black_move
 from ai import get_ai
+from ai.difficulty_config import DIFFICULTY_CONFIGS
 
 router = APIRouter()
 
 
 class AiMoveRequest(BaseModel):
     board: list[list[str | None]]  # 15x15
-    difficulty: int                 # 1~5
+    difficulty: int                 # DIFFICULTY_CONFIGS 키와 일치해야 함
     ai_color: str                   # "black" | "white"
 
 
@@ -39,8 +40,11 @@ def health_check():
 @router.post("/move", response_model=AiMoveResponse)
 def get_ai_move(req: AiMoveRequest):
     """AI 착수 위치 요청"""
-    if req.difficulty not in range(1, 6):
-        raise HTTPException(status_code=400, detail="difficulty must be 1~5")
+    if req.difficulty not in DIFFICULTY_CONFIGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"difficulty must be one of {sorted(DIFFICULTY_CONFIGS)}",
+        )
     if req.ai_color not in ("black", "white"):
         raise HTTPException(status_code=400, detail="ai_color must be 'black' or 'white'")
 
