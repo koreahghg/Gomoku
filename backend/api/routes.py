@@ -1,8 +1,10 @@
+import math
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from game.rules import check_winner, validate_black_move
 from ai import get_ai
 from ai.difficulty_config import DIFFICULTY_CONFIGS
+from ai.core import BoardState, PatternEvaluator
 
 router = APIRouter()
 
@@ -77,3 +79,27 @@ def validate_move(req: ValidateMoveRequest):
     board[row][col] = None
 
     return ValidateMoveResponse(valid=True, winner=winner)
+
+
+class EvaluateRequest(BaseModel):
+    board: list[list[str | None]]
+    ai_color: str  # "black" | "white"
+
+
+class EvaluateResponse(BaseModel):
+    probability: float  # AI 승리 확률 0.0~100.0
+
+
+_evaluator = PatternEvaluator()
+_SCALE = 3000.0  # 점수 → 확률 변환 감도 (낮을수록 민감)
+
+
+@router.post("/evaluate", response_model=EvaluateResponse)
+def evaluate_board(req: EvaluateRequest):
+    """현재 보드 상태를 평가해 AI 승리 확률(%)을 반환."""
+    if req.ai_color not in ("black", "white"):
+        raise HTTPException(status_code=400, detail="ai_color must be 'black' or 'white'")
+    board_state = BoardState.from_grid(req.board)
+    score = _evaluator.evaluate(board_state, req.ai_color)
+    probability = 100.0 / (1.0 + math.exp(-score / _SCALE))
+    return EvaluateResponse(probability=round(probability, 1))
