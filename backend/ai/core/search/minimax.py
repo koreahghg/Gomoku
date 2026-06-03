@@ -5,15 +5,18 @@ from ..evaluator import BaseEvaluator
 from ..candidate import CandidateGenerator
 
 _INF = float("inf")
-_WIN_SCORE = 200_000  # SCORE_TABLE["FIVE"](100_000)보다 커야 한다
+_WIN_SCORE = 200_000   # SCORE_TABLE["FIVE"](100_000)보다 커야 한다
+_TT_MAX_SIZE = 200_000 # Minimax는 가지치기 없음 → 소규모 TT로 충분
 
 
 class MinimaxSearch(BaseSearch):
-    """Minimax 탐색 엔진."""
+    """Minimax 탐색 엔진 + Transposition Table (exact-only)."""
 
     def __init__(self, evaluator: BaseEvaluator, generator: CandidateGenerator) -> None:
         super().__init__(evaluator, generator)
         self.node_count: int = 0
+        # TT: board_hash → (value, depth)  — exact 값만 저장
+        self._tt: dict[int, tuple[float, int]] = {}
 
     def search(self, board: BoardState, color: str, depth: int) -> tuple[int, int]:
         """
@@ -48,14 +51,25 @@ class MinimaxSearch(BaseSearch):
         is_maximizing: bool,
     ) -> float:
         """
-        Minimax 재귀 탐색.
+        Minimax 재귀 탐색 + Transposition Table 조회/저장 (exact 한정).
         turn_color: 이번 수를 두는 색상
         is_maximizing: turn_color가 AI(최대화) 플레이어이면 True
         """
         self.node_count += 1
 
+        # ── Transposition Table 조회 ──────────────────────────────────────
+        h = board.hash
+        entry = self._tt.get(h)
+        if entry is not None:
+            tt_val, tt_depth = entry
+            if tt_depth >= depth:
+                return tt_val
+        # ─────────────────────────────────────────────────────────────────
+
         if depth <= 0:
-            return self.evaluator.evaluate(board, self._ai_color)
+            val = self.evaluator.evaluate(board, self._ai_color)
+            self._tt[h] = (val, 0)
+            return val
 
         candidates = self.generator.generate(board, turn_color)
 
@@ -69,7 +83,6 @@ class MinimaxSearch(BaseSearch):
                 val = self._minimax(board, self._opponent(turn_color), depth - 1, False)
                 board.undo()
                 best = max(best, val)
-            return best
         else:
             best = _INF
             for c in candidates:
@@ -80,4 +93,7 @@ class MinimaxSearch(BaseSearch):
                 val = self._minimax(board, self._opponent(turn_color), depth - 1, True)
                 board.undo()
                 best = min(best, val)
-            return best
+
+        if len(self._tt) < _TT_MAX_SIZE:
+            self._tt[h] = (best, depth)
+        return best
