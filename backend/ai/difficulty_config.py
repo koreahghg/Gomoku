@@ -14,6 +14,7 @@ class DifficultyConfig:
     random_rate: float   # 랜덤 착수 확률  0.0 = 항상 AI / 1.0 = 항상 랜덤
     use_alphabeta: bool  # True = Alpha-Beta  /  False = Minimax
     radius: int          # 후보 생성 반경 (기존 돌 주변 N칸)
+    max_candidates: int  # 탐색 후보 상한 (0 = 무제한, 작을수록 빠르고 약해짐)
 
 
 DIFFICULTY_CONFIGS: dict[int, DifficultyConfig] = {
@@ -23,6 +24,7 @@ DIFFICULTY_CONFIGS: dict[int, DifficultyConfig] = {
         random_rate=0.3,    # 30% 확률로 후보 중 랜덤 선택
         use_alphabeta=False,
         radius=2,
+        max_candidates=8,
     ),
     2: DifficultyConfig(
         name="Normal",
@@ -30,6 +32,7 @@ DIFFICULTY_CONFIGS: dict[int, DifficultyConfig] = {
         random_rate=0.0,
         use_alphabeta=False,
         radius=2,
+        max_candidates=12,
     ),
     3: DifficultyConfig(
         name="Hard",
@@ -37,6 +40,7 @@ DIFFICULTY_CONFIGS: dict[int, DifficultyConfig] = {
         random_rate=0.0,
         use_alphabeta=True,
         radius=2,
+        max_candidates=15,
     ),
     4: DifficultyConfig(
         name="Extreme",
@@ -44,6 +48,7 @@ DIFFICULTY_CONFIGS: dict[int, DifficultyConfig] = {
         random_rate=0.0,
         use_alphabeta=True,
         radius=2,
+        max_candidates=10,
     ),
 }
 # ─────────────────────────────────────────────────────────────────────────
@@ -54,7 +59,7 @@ class ConfigurableAI(BaseAI):
 
     def __init__(self, config: DifficultyConfig) -> None:
         self._config = config
-        generator = CandidateGenerator(radius=config.radius)
+        generator = CandidateGenerator(radius=config.radius, max_candidates=config.max_candidates)
         evaluator = PatternEvaluator()
         self._search = (
             AlphaBetaSearch(evaluator, generator)
@@ -66,9 +71,9 @@ class ConfigurableAI(BaseAI):
         board_state = BoardState.from_grid(board)
         cfg = self._config
 
-        # 랜덤 착수 (Easy의 가끔 랜덤)
+        # 랜덤 착수 (Easy의 가끔 랜덤) — 기존 generator 재사용
         if cfg.random_rate > 0 and random.random() < cfg.random_rate:
-            candidates = CandidateGenerator(radius=cfg.radius).generate(board_state, ai_color)
+            candidates = self._search.generator.generate(board_state, ai_color)
             c = random.choice(candidates)
             return c.row, c.col
 
