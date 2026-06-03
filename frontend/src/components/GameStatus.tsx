@@ -20,6 +20,9 @@ export default function GameStatus({ game }: Props) {
   } else if (phase === 'draw') {
     message = '무승부';
     messageClass = 'text-2xl font-bold text-yellow-700';
+  } else if (state.isAiThinking) {
+    message = 'AI 생각 중…';
+    messageClass = 'text-xl font-bold text-blue-600 animate-pulse';
   } else {
     message = currentTurn === 'black' ? '흑의 차례' : '백의 차례';
   }

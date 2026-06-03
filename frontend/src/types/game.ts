@@ -57,3 +57,19 @@ export interface ValidateMoveResponse {
   reason?: string;         // 무효 사유 (예: "3-3 금수", "장목")
   winner?: PlayerColor;    // 이 착수로 승리 시 색상
 }
+
+// 보드 평가 요청 / 응답
+export interface EvaluateRequest {
+  board: Board;
+  ai_color: PlayerColor;
+}
+
+export interface EvaluateResponse {
+  probability: number;     // AI 승리 확률 0~100
+}
+
+// 승리 확률 이력 한 점
+export interface ProbabilityPoint {
+  move: number;            // 수 번호 (0 = 시작)
+  prob: number;            // AI 승리 확률 0~100
+}
