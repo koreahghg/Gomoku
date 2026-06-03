@@ -18,14 +18,29 @@ class Candidate(NamedTuple):
     score: float = 0.0
 
 
+def _density(occupied: int, row: int, col: int, radius: int) -> int:
+    """(row, col) 주변 radius 이내의 돌 개수 (Move Ordering 용 빠른 휴리스틱)."""
+    count = 0
+    for dr in range(-radius, radius + 1):
+        for dc in range(-radius, radius + 1):
+            nr, nc = row + dr, col + dc
+            if 0 <= nr < SIZE and 0 <= nc < SIZE:
+                if (occupied >> (nr * SIZE + nc)) & 1:
+                    count += 1
+    return count
+
+
 class CandidateGenerator:
     """
     탐색 후보 수 생성기.
     우선순위: 즉시 승리수 → 즉시 차단수 → 기존 돌 주변 radius 이내 빈 셀.
+    후보는 주변 돌 밀도 내림차순으로 정렬 → Alpha-Beta Move Ordering 효과.
+    max_candidates > 0 이면 상위 N개만 반환해 분기 인수(branching factor)를 제한.
     """
 
-    def __init__(self, radius: int = 2) -> None:
+    def __init__(self, radius: int = 2, max_candidates: int = 0) -> None:
         self.radius = radius
+        self.max_candidates = max_candidates
 
     def generate(self, board: BoardState, color: str) -> list[Candidate]:
         """
@@ -46,10 +61,12 @@ class CandidateGenerator:
         return []
 
     def _get_proximity_moves(self, board: BoardState) -> list[Candidate]:
-        """기존 돌 주변 radius 이내 빈 셀을 후보로 반환. (row, col) 오름차순 정렬."""
+        """기존 돌 주변 radius 이내 빈 셀을 후보로 반환.
+        밀도(주변 돌 수) 내림차순 정렬 → 높은 밀도 = 쟁점 지역 = 먼저 탐색.
+        max_candidates 가 0이 아니면 상위 N개로 제한.
+        """
         occupied = board.bitboard.occupied_mask()
 
-        # 아직 한 수도 없으면 천원 반환
         if occupied == 0:
             return [Candidate(*_CENTER)]
 
@@ -69,4 +86,11 @@ class CandidateGenerator:
         if not seen:
             return [Candidate(*_CENTER)]
 
-        return sorted(Candidate(r, c) for r, c in seen)
+        # 밀도 기반 정렬 (높은 밀도 → 먼저 탐색)
+        candidates = sorted(
+            (Candidate(r, c, _density(occupied, r, c, self.radius)) for r, c in seen),
+            key=lambda c: -c.score,
+        )
+        if self.max_candidates > 0:
+            candidates = candidates[:self.max_candidates]
+        return candidates
