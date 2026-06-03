@@ -11,3 +11,5 @@ frontend/.vite/
 
 # OS
 .DS_Store
+engines/rapfi
+engines/rapfi.exe
