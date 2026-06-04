@@ -2,79 +2,73 @@ import { useState } from 'react';
 import { Difficulty, PlayerColor } from '../types/game';
 import { GameHook } from '../hooks/useGame';
 
-interface Props {
-  game: GameHook;
-}
-
-// ── 난이도 표시 이름 (백엔드 DIFFICULTY_CONFIGS.name과 일치) ──────────────
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  1: 'Easy',
-  2: 'Normal',
-  3: 'Hard',
-  4: 'Extreme',
+  1: 'Easy', 2: 'Normal', 3: 'Hard', 4: 'Extreme',
 };
-// ────────────────────────────────────────────────────────────────────────
 
-export default function GameControls({ game }: Props) {
-  const { state, startGame, resetGame } = game;
+export default function GameControls({ game }: { game: GameHook }) {
+  const { state, startGame } = game;
   const [selectedColor, setSelectedColor] = useState<PlayerColor>('black');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(3);
+  const [selectedDiff, setSelectedDiff] = useState<Difficulty>(3);
 
-  // 게임 중·종료 후: 처음으로 돌아가기 버튼만 표시
-  if (state.phase !== 'setup') {
-    return (
-      <div className="mt-6">
-        <button
-          onClick={resetGame}
-          className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-        >
-          처음으로
-        </button>
-      </div>
-    );
-  }
+  if (state.phase !== 'setup') return null;
 
   return (
-    <div className="mt-8 flex flex-col items-center gap-5">
-      {/* 색상 선택 */}
-      <div className="flex flex-col items-center gap-2">
-        <span className="text-sm font-semibold text-gray-600">색상 선택</span>
-        <div className="flex gap-3">
-          {(['black', 'white'] as PlayerColor[]).map((color) => (
+    <div className="flex flex-col gap-6">
+      {/* Stone color picker */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">돌 선택</div>
+        <div className="grid grid-cols-2 gap-3">
+          {(['black', 'white'] as PlayerColor[]).map(color => (
             <button
               key={color}
               onClick={() => setSelectedColor(color)}
               className={[
-                'px-5 py-2 rounded border-2 font-medium transition-colors',
+                'flex flex-col items-center gap-2.5 py-4 rounded-xl border-2 transition-all',
                 selectedColor === color
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-300 text-gray-600 hover:border-gray-400',
+                  ? 'border-amber-500 bg-amber-500/10'
+                  : 'border-slate-600/60 hover:border-slate-500 bg-slate-700/30',
               ].join(' ')}
             >
-              {color === 'black' ? '흑 (선공)' : '백 (후공)'}
+              <div className={[
+                'w-10 h-10 rounded-full shadow-xl',
+                color === 'black'
+                  ? 'bg-gradient-to-br from-slate-400 to-slate-900 border border-slate-600'
+                  : 'bg-gradient-to-br from-white to-slate-300 border border-slate-400',
+              ].join(' ')} />
+              <span className="text-sm font-medium text-slate-300">
+                {color === 'black' ? '흑 (선공)' : '백 (후공)'}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 난이도 선택 */}
-      <div className="flex flex-col items-center gap-2">
-        <span className="text-sm font-semibold text-gray-600">난이도</span>
-        <select
-          value={selectedDifficulty}
-          onChange={(e) => setSelectedDifficulty(Number(e.target.value) as Difficulty)}
-          className="px-4 py-2 border border-gray-300 rounded text-gray-700"
-        >
-          {([1, 2, 3, 4] as Difficulty[]).map((d) => (
-            <option key={d} value={d}>{DIFFICULTY_LABELS[d]}</option>
+      {/* Difficulty segmented control */}
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">난이도</div>
+        <div className="flex bg-slate-700/40 p-1 rounded-lg gap-0.5">
+          {([1, 2, 3, 4] as Difficulty[]).map(d => (
+            <button
+              key={d}
+              onClick={() => setSelectedDiff(d)}
+              className={[
+                'flex-1 py-2 rounded-md text-xs font-medium transition-all',
+                selectedDiff === d
+                  ? 'bg-amber-500 text-slate-900 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200',
+              ].join(' ')}
+            >
+              {DIFFICULTY_LABELS[d]}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
-      {/* 게임 시작 */}
+      {/* Start button */}
       <button
-        onClick={() => startGame(selectedColor, selectedDifficulty)}
-        className="px-8 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold text-lg shadow"
+        onClick={() => startGame(selectedColor, selectedDiff)}
+        className="w-full py-3 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-900 font-bold rounded-xl transition-colors shadow-lg text-sm tracking-wide"
       >
         게임 시작
       </button>

@@ -1,4 +1,5 @@
 import math
+from collections import OrderedDict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from game.rules import check_winner, validate_black_move
@@ -10,9 +11,9 @@ router = APIRouter()
 
 
 class AiMoveRequest(BaseModel):
-    board: list[list[str | None]]  # 15x15
-    difficulty: int                 # DIFFICULTY_CONFIGS 키와 일치해야 함
-    ai_color: str                   # "black" | "white"
+    board: list[list[str | None]]
+    difficulty: int
+    ai_color: str
 
 
 class AiMoveResponse(BaseModel):
@@ -24,24 +25,22 @@ class ValidateMoveRequest(BaseModel):
     board: list[list[str | None]]
     row: int
     col: int
-    color: str                      # "black" | "white"
+    color: str
 
 
 class ValidateMoveResponse(BaseModel):
     valid: bool
     reason: str | None = None
-    winner: str | None = None       # 이 착수로 승리 시 색상 반환
+    winner: str | None = None
 
 
 @router.get("/health")
 def health_check():
-    """서버 상태 확인"""
     return {"status": "ok"}
 
 
 @router.post("/move", response_model=AiMoveResponse)
 def get_ai_move(req: AiMoveRequest):
-    """AI 착수 위치 요청"""
     if req.difficulty not in DIFFICULTY_CONFIGS:
         raise HTTPException(
             status_code=400,
@@ -57,7 +56,6 @@ def get_ai_move(req: AiMoveRequest):
 
 @router.post("/validate", response_model=ValidateMoveResponse)
 def validate_move(req: ValidateMoveRequest):
-    """착수 유효성 검증 (금수 포함) + 승리 여부 판정"""
     row, col = req.row, req.col
     board = req.board
 
@@ -67,13 +65,11 @@ def validate_move(req: ValidateMoveRequest):
     if board[row][col] is not None:
         return ValidateMoveResponse(valid=False, reason="이미 돌이 있는 위치입니다")
 
-    # 흑 금수 검사
     if req.color == 'black':
         valid, reason = validate_black_move(board, row, col)
         if not valid:
             return ValidateMoveResponse(valid=False, reason=reason)
 
-    # 승리 여부 판정 (임시로 돌 놓고 검사 후 복구)
     board[row][col] = req.color
     winner = req.color if check_winner(board, row, col, req.color) else None
     board[row][col] = None
@@ -83,23 +79,41 @@ def validate_move(req: ValidateMoveRequest):
 
 class EvaluateRequest(BaseModel):
     board: list[list[str | None]]
-    ai_color: str  # "black" | "white"
+    ai_color: str
 
 
 class EvaluateResponse(BaseModel):
-    probability: float  # AI 승리 확률 0.0~100.0
+    probability: float
 
 
 _evaluator = PatternEvaluator()
-_SCALE = 3000.0  # 점수 → 확률 변환 감도 (낮을수록 민감)
+_SCALE = 3000.0
+
+# LRU cache for repeated board evaluations (same position evaluated many times per game)
+_EVAL_CACHE_MAX = 1024
+_eval_cache: OrderedDict[tuple, float] = OrderedDict()
+
+
+def _board_key(board: list[list[str | None]], ai_color: str) -> tuple:
+    return (tuple(cell or '' for row in board for cell in row), ai_color)
 
 
 @router.post("/evaluate", response_model=EvaluateResponse)
 def evaluate_board(req: EvaluateRequest):
-    """현재 보드 상태를 평가해 AI 승리 확률(%)을 반환."""
     if req.ai_color not in ("black", "white"):
         raise HTTPException(status_code=400, detail="ai_color must be 'black' or 'white'")
+
+    key = _board_key(req.board, req.ai_color)
+    if key in _eval_cache:
+        _eval_cache.move_to_end(key)
+        return EvaluateResponse(probability=_eval_cache[key])
+
     board_state = BoardState.from_grid(req.board)
     score = _evaluator.evaluate(board_state, req.ai_color)
-    probability = 100.0 / (1.0 + math.exp(-score / _SCALE))
-    return EvaluateResponse(probability=round(probability, 1))
+    probability = round(100.0 / (1.0 + math.exp(-score / _SCALE)), 1)
+
+    _eval_cache[key] = probability
+    if len(_eval_cache) > _EVAL_CACHE_MAX:
+        _eval_cache.popitem(last=False)
+
+    return EvaluateResponse(probability=probability)

@@ -1,24 +1,24 @@
 import { useState, useCallback, useRef } from 'react';
 import { Board, Difficulty, GameState, PlayerColor, ProbabilityPoint, Stone } from '../types/game';
 
-const BOARD_SIZE = 15;
+const N = 15;
 
 function createEmptyBoard(): Board {
-  return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));
+  return Array.from({ length: N }, () => Array(N).fill(null));
 }
 
 function checkWin(board: Board, row: number, col: number, color: Stone): boolean {
-  const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
-  for (const [dr, dc] of directions) {
+  const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  for (const [dr, dc] of dirs) {
     let count = 1;
-    for (let i = 1; i < BOARD_SIZE; i++) {
+    for (let i = 1; i < N; i++) {
       const r = row + dr * i, c = col + dc * i;
-      if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c] !== color) break;
+      if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== color) break;
       count++;
     }
-    for (let i = 1; i < BOARD_SIZE; i++) {
+    for (let i = 1; i < N; i++) {
       const r = row - dr * i, c = col - dc * i;
-      if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c] !== color) break;
+      if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== color) break;
       count++;
     }
     if (count >= 5) return true;
@@ -26,7 +26,24 @@ function checkWin(board: Board, row: number, col: number, color: Stone): boolean
   return false;
 }
 
-// ── 백엔드 호출 유틸 ─────────────────────────────────────────────────────────
+function findWinningStones(board: Board, row: number, col: number, color: Stone): [number, number][] {
+  const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]] as const;
+  for (const [dr, dc] of dirs) {
+    const stones: [number, number][] = [[row, col]];
+    for (let i = 1; i < N; i++) {
+      const r = row + dr * i, c = col + dc * i;
+      if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== color) break;
+      stones.push([r, c]);
+    }
+    for (let i = 1; i < N; i++) {
+      const r = row - dr * i, c = col - dc * i;
+      if (r < 0 || r >= N || c < 0 || c >= N || board[r][c] !== color) break;
+      stones.push([r, c]);
+    }
+    if (stones.length >= 5) return stones;
+  }
+  return [];
+}
 
 async function apiFetchAiMove(board: Board, aiColor: PlayerColor, difficulty: Difficulty) {
   const res = await fetch('/api/move', {
@@ -38,12 +55,13 @@ async function apiFetchAiMove(board: Board, aiColor: PlayerColor, difficulty: Di
   return res.json() as Promise<{ row: number; col: number }>;
 }
 
-async function apiFetchProb(board: Board, aiColor: PlayerColor): Promise<number> {
+async function apiFetchProb(board: Board, aiColor: PlayerColor, signal: AbortSignal): Promise<number> {
   try {
     const res = await fetch('/api/evaluate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ board, ai_color: aiColor }),
+      signal,
     });
     if (!res.ok) return 50;
     const data = await res.json();
@@ -52,8 +70,6 @@ async function apiFetchProb(board: Board, aiColor: PlayerColor): Promise<number>
     return 50;
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 const initialGameState: GameState = {
   board: createEmptyBoard(),
@@ -65,22 +81,33 @@ const initialGameState: GameState = {
   moveCount: 0,
   lastMove: null,
   invalidReason: null,
+  winningStones: [],
 };
 
 export function useGame() {
   const [state, setState] = useState<GameState>(initialGameState);
   const [probHistory, setProbHistory] = useState<ProbabilityPoint[]>([]);
-  const busyRef = useRef(false); // AI 이동 중 중복 클릭 방지
+  const busyRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state; // Always in sync — avoids stale closure in placeStone
+  const evalAbortRef = useRef<AbortController | null>(null);
 
-  // ── 게임 시작 ───────────────────────────────────────────────────────────────
+  const scheduleEval = useCallback((board: Board, aiColor: PlayerColor, move: number) => {
+    evalAbortRef.current?.abort();
+    const ac = new AbortController();
+    evalAbortRef.current = ac;
+    apiFetchProb(board, aiColor, ac.signal).then(prob => {
+      if (!ac.signal.aborted)
+        setProbHistory(h => [...h, { move, prob }]);
+    });
+  }, []);
+
   const startGame = useCallback(async (playerColor: PlayerColor, difficulty: Difficulty) => {
     const emptyBoard = createEmptyBoard();
     const aiColor: PlayerColor = playerColor === 'black' ? 'white' : 'black';
-
     setProbHistory([{ move: 0, prob: 50 }]);
 
     if (playerColor === 'black') {
-      // 플레이어(흑) 선공 → 즉시 플레이어 차례
       setState({
         ...initialGameState,
         board: emptyBoard,
@@ -89,52 +116,53 @@ export function useGame() {
         phase: 'playing',
         currentTurn: 'black',
       });
-    } else {
-      // 플레이어(백) → AI(흑) 선공
-      setState({
-        ...initialGameState,
-        board: emptyBoard,
-        playerColor,
-        difficulty,
-        phase: 'playing',
-        currentTurn: 'black',
-        isAiThinking: true,
-      });
+      return;
+    }
 
-      try {
-        busyRef.current = true;
-        const aiMove = await apiFetchAiMove(emptyBoard, 'black', difficulty);
-        const b = emptyBoard.map(r => [...r]);
-        b[aiMove.row][aiMove.col] = 'black';
-        const prob = await apiFetchProb(b, aiColor);
+    // Player is white → AI (black) goes first
+    setState({
+      ...initialGameState,
+      board: emptyBoard,
+      playerColor,
+      difficulty,
+      phase: 'playing',
+      currentTurn: 'black',
+      isAiThinking: true,
+    });
 
-        setState(prev => ({
-          ...prev,
-          board: b,
-          currentTurn: 'white',
-          moveCount: 1,
-          lastMove: [aiMove.row, aiMove.col],
-          isAiThinking: false,
-        }));
-        setProbHistory([{ move: 0, prob: 50 }, { move: 1, prob }]);
-      } catch {
-        setState(prev => ({ ...prev, isAiThinking: false }));
-      } finally {
-        busyRef.current = false;
-      }
+    try {
+      busyRef.current = true;
+      const aiMove = await apiFetchAiMove(emptyBoard, 'black', difficulty);
+      const b = emptyBoard.map(r => [...r]);
+      b[aiMove.row][aiMove.col] = 'black';
+      const prob = await apiFetchProb(b, aiColor, new AbortController().signal);
+
+      setState(prev => ({
+        ...prev,
+        board: b,
+        currentTurn: 'white',
+        moveCount: 1,
+        lastMove: [aiMove.row, aiMove.col],
+        isAiThinking: false,
+      }));
+      setProbHistory([{ move: 0, prob: 50 }, { move: 1, prob }]);
+    } catch {
+      setState(prev => ({ ...prev, isAiThinking: false }));
+    } finally {
+      busyRef.current = false;
     }
   }, []);
 
-  // ── 리셋 ────────────────────────────────────────────────────────────────────
   const resetGame = useCallback(() => {
     busyRef.current = false;
+    evalAbortRef.current?.abort();
     setState(initialGameState);
     setProbHistory([]);
   }, []);
 
-  // ── 돌 놓기 (플레이어) ──────────────────────────────────────────────────────
+  // Stable reference — reads fresh state via stateRef, no stale closure
   const placeStone = useCallback(async (row: number, col: number) => {
-    const { phase, currentTurn, playerColor, difficulty, board, moveCount } = state;
+    const { phase, currentTurn, playerColor, difficulty, board, moveCount } = stateRef.current;
 
     if (
       phase !== 'playing' ||
@@ -146,7 +174,7 @@ export function useGame() {
     busyRef.current = true;
     const aiColor: PlayerColor = playerColor === 'black' ? 'white' : 'black';
 
-    // ── 흑 금수 검사 (열린33 · 44 · 장목) ──
+    // Forbidden move check (black only)
     if (playerColor === 'black') {
       try {
         const res = await fetch('/api/validate', {
@@ -161,20 +189,18 @@ export function useGame() {
           return;
         }
       } catch {
-        // 네트워크 오류 시 검증 스킵
+        // Network error — skip validation
       }
     }
 
-    // ── 플레이어 착수 ──
+    // Place player stone
     const b1: Board = board.map(r => [...r]);
     b1[row][col] = playerColor;
     const m1 = moveCount + 1;
     const playerWon = checkWin(b1, row, col, playerColor);
     const phase1 = playerWon
       ? (`${playerColor}_win` as const)
-      : m1 === BOARD_SIZE * BOARD_SIZE
-      ? 'draw'
-      : 'playing';
+      : m1 === N * N ? 'draw' : 'playing';
 
     setState(prev => ({
       ...prev,
@@ -184,20 +210,18 @@ export function useGame() {
       lastMove: [row, col],
       phase: phase1,
       isAiThinking: phase1 === 'playing',
-      invalidReason: null,   // 유효한 착수 → 이전 금수 메시지 제거
+      invalidReason: null,
+      winningStones: playerWon ? findWinningStones(b1, row, col, playerColor) : [],
     }));
 
-    // 플레이어 착수 후 확률 갱신
-    apiFetchProb(b1, aiColor).then(prob =>
-      setProbHistory(h => [...h, { move: m1, prob }])
-    );
+    scheduleEval(b1, aiColor, m1);
 
     if (phase1 !== 'playing') {
       busyRef.current = false;
       return;
     }
 
-    // ── AI 착수 ──
+    // AI move
     try {
       const aiMove = await apiFetchAiMove(b1, aiColor, difficulty);
       const b2: Board = b1.map(r => [...r]);
@@ -206,9 +230,7 @@ export function useGame() {
       const aiWon = checkWin(b2, aiMove.row, aiMove.col, aiColor);
       const phase2 = aiWon
         ? (`${aiColor}_win` as const)
-        : m2 === BOARD_SIZE * BOARD_SIZE
-        ? 'draw'
-        : 'playing';
+        : m2 === N * N ? 'draw' : 'playing';
 
       setState(prev => ({
         ...prev,
@@ -218,18 +240,16 @@ export function useGame() {
         lastMove: [aiMove.row, aiMove.col],
         phase: phase2,
         isAiThinking: false,
+        winningStones: aiWon ? findWinningStones(b2, aiMove.row, aiMove.col, aiColor) : [],
       }));
 
-      // AI 착수 후 확률 갱신
-      apiFetchProb(b2, aiColor).then(prob =>
-        setProbHistory(h => [...h, { move: m2, prob }])
-      );
+      scheduleEval(b2, aiColor, m2);
     } catch {
       setState(prev => ({ ...prev, isAiThinking: false }));
     } finally {
       busyRef.current = false;
     }
-  }, [state]);
+  }, [scheduleEval]); // Stable — stateRef gives fresh values without deps
 
   return { state, probHistory, startGame, resetGame, placeStone };
 }
